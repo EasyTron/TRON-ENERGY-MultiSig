@@ -1,0 +1,59 @@
+import requests
+from tronpy import Tron
+from tronpy.keys import PrivateKey, to_hex_address
+from tronpy.providers import HTTPProvider
+
+# Настройки
+WALLET_1 = "T..."
+WALLET_2 = "T..."
+PERMISSION_ID = 3
+BALANCE = 20_000_000  # 20 TRX (~30,000 ENERGY)
+PRIVATE_KEY_WALLET_2 = "YOUR_PRIVATE_KEY_HERE"  # Вставьте приватный ключ
+TRONGRID_API_KEY = "YOUR_TRONGRID_API_KEY"  # Вставьте API Key
+
+# Подключение к Mainnet
+client = Tron(provider=HTTPProvider("https://api.trongrid.io", api_key=TRONGRID_API_KEY))
+
+try:
+    # Проверка ресурсов
+    resources = client.get_account_resource(WALLET_1)
+    print(f"WALLET_1 resources: {resources}")
+
+    # Проверка разрешений
+    account = client.get_account(WALLET_1)
+    print(f"Account permissions: {account.get('active_permission', [])}")
+
+    # Создание транзакции через HTTP-запрос
+    url = "https://api.trongrid.io/wallet/delegateresource"
+    headers = {"Accept": "application/json", "TRON-PRO-API-KEY": TRONGRID_API_KEY}
+    payload = {
+        "owner_address": to_hex_address(WALLET_1),
+        "receiver_address": to_hex_address(WALLET_2),
+        "balance": BALANCE,
+        "resource": "ENERGY",
+        "lock": False,
+        "permission_id": PERMISSION_ID
+    }
+    response = requests.post(url, json=payload, headers=headers)
+    response.raise_for_status()
+    txn = response.json()
+    print(f"Created transaction: {txn}")
+
+    # Подпись транзакции
+    private_key = PrivateKey(bytes.fromhex(PRIVATE_KEY_WALLET_2))
+    signed_txn = client.trx.sign(txn, private_key)
+
+    # Отправка транзакции
+    broadcast_url = "https://api.trongrid.io/wallet/broadcasttransaction"
+    broadcast_response = requests.post(broadcast_url, json=signed_txn, headers=headers)
+    broadcast_response.raise_for_status()
+    result = broadcast_response.json()
+    print("Transaction ID:", result.get("txid"))
+    print("Result:", result)
+
+    # Проверка делегирования
+    delegated = client.get_delegated_resource_v2(WALLET_1, WALLET_2)
+    print(f"Delegated resources: {delegated}")
+
+except Exception as e:
+    print(f"Error: {str(e)}")
